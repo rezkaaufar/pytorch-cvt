@@ -9,6 +9,8 @@ install:
   - pip install -q torch==$PYTORCH_VERSION
   - pip install -r requirements.txt
   # - pip install -e .
+notifications:
+  email: false
 script: pytests
 after_success:
   - pip install coveralls
