@@ -9,7 +9,7 @@ install:
   - pip install -q torch==$PYTORCH_VERSION
   - pip install -r requirements.txt
   # - pip install -e .
-script: tests/cvt-tests.py
-# after_success:
-#   - pip install coveralls
-#   - coveralls
+script: pytests
+after_success:
+  - pip install coveralls
+  - coveralls
