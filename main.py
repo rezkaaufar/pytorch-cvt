@@ -1,95 +1,72 @@
-import torch
+import argparse
+from src.trainer import Trainer
 
-from src.data_loader import Data
-from src.cvt_model import CVTModel
-from torch import optim
-from src.evaluator import Evaluator
-from src.artifacts_manager import ArtifactsManager
-from warmup_scheduler import GradualWarmupScheduler
-from tensorboardX import SummaryWriter
+def init_argparser():
+    parser = argparse.ArgumentParser()
 
-""" hyperparameter """
-train_path = "labeled_data/ner/sentence-train.conll"
-dev_path = "labeled_data/ner/sentence-dev.conll"
-unlabeled_path = "unlabeled_data/informal/test.txt"
-save_to = "models/"
-semi_supervised = True  # whether to use auxiliary modules or not
-resume_training = False
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device("cpu")
+    # Model arguments
+    parser.add_argument('--train_path', help='Training data path')
+    parser.add_argument('--dev_path', help='Development data path')
+    parser.add_argument('--test_path', help='Test data path')
+    parser.add_argument('--unlabeled_path', help='Unlabeled data path')
+    parser.add_argument('--save_to', default='models/', help='Path to model directory')
 
-""" initialize data_loader, artifacts manager, and summary writer """
-data = Data(train_path, unlabeled_path, semi_supervised, dev_path=dev_path, device=device)
-data.initialize()
-pad_token_id = data.get_pad_token_id()
-num_words, num_chars, num_tags = data.get_input_sizes()
-artifacts_manager = ArtifactsManager(save_to, device=device)
-writer = SummaryWriter(log_dir='runs/cvt')
+    parser.add_argument('--batch_size', type=int,
+                        help='Batch size', default=32)
+    parser.add_argument('--learning_rate', type=float,
+                        help='Learning rate, recommended settings for adam=0.001', default=1e-3)
+    parser.add_argument('--weight_decay', type=float,
+                        help='Weight decay', default=5e-3)
+    parser.add_argument('--dropout_labeled', type=float,
+                        help='Dropout probability during supervised regime', default=0.5)
+    parser.add_argument('--dropout_unlabeled', type=float,
+                        help='Dropout probability during unsupervised regime', default=0.8)
+    parser.add_argument('--semi_supervised', dest='semi_supervised', action='store_true',
+                        help='Indicates to use cvt or not')
+    parser.add_argument('--no-semi_supervised', dest='semi_supervised', action='store_false')
+    parser.set_defaults(semi_supervised=True)
+    parser.add_argument('--char_compose_method', type=str,
+                        help='Whether to use cnn or rnn to compose char embedding',
+                        default='cnn', choices=['cnn','rnn'])
+    parser.add_argument('--pretrained_embeddings_path', default=None,
+                        help='Path to pretrained embeddings')
+    parser.add_argument('--use_crf', dest='use_crf', action='store_true',
+                        help='Indicates to use cvt or not')
+    parser.add_argument('--no_crf', dest='use_crf', action='store_false')
+    parser.set_defaults(use_crf=True)
 
-""" saving and loading models. the initialize command automatically creates the main encoder, primary prediction 
-module, and the five auxiliary modules """
-if not resume_training:
-    cvt = CVTModel(num_words, num_tags, num_chars=num_chars, device=device)
-    cvt.initialize()
-    cvt.to(device)
-    # artifacts_manager.save_model_and_artifacts(cvt)
-else:
-    cvt = artifacts_manager.load_model_and_artifacts()
+    parser.add_argument('--save_every', type=int,
+                        help='Every how many batches the model should be saved', default=2000)
+    parser.add_argument('--print_every', type=int,
+                        help='Every how many batches to print results', default=301)
 
+    parser.add_argument('--resume-training', action='store_true',
+                        help='Indicates if training has to be resumed from the latest checkpoint')
 
-""" optimizer """
-optimizer = optim.Adam(cvt.parameters(), lr=1e-3, weight_decay=5e-3)
-# optimizer = optim.SGD(cvt.parameters(), lr=0.1, momentum=0.9)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True)
-# max_epoch = 1200
-# scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, max_epoch)
-# scheduler_warmup = GradualWarmupScheduler(optimizer, multiplier=8, total_epoch=800, after_scheduler=scheduler_cosine)
+    return parser
 
-""" evaluator """
-evaluator = Evaluator()
+def run():
+    parser = init_argparser()
+    opt = parser.parse_args()
+    trainer = Trainer(train_path=opt.train_path,
+                      dev_path=opt.dev_path,
+                      test_path=opt.test_path,
+                      unlabeled_path=opt.unlabeled_path,
+                      save_to=opt.save_to,
+                      semi_supervised=opt.semi_supervised,
+                      batch_size=opt.batch_size,
+                      learning_rate=opt.learning_rate,
+                      weight_decay=opt.weight_decay,
+                      dropout_lab=opt.dropout_labeled,
+                      dropout_unlab=opt.dropout_unlabeled,
+                      char_compose_method=opt.char_compose_method,
+                      pretrained_embeddings_path=opt.pretrained_embeddings_path,
+                      use_crf=opt.use_crf,
+                      save_every=opt.save_every,
+                      print_every=opt.print_every,
+                      resume_training=opt.resume_training,
+                      )
+    trainer.run()
 
-""" training """
-count = 0
-running_loss = 0.0
-for mb, mode in data.get_alternating_minibatch():
-    cvt.train()
-    optimizer.zero_grad()
-    word_input = getattr(mb, "words")
-    char_input = getattr(mb, "char")
-    label = None
-    if mode == "labeled":
-        label = getattr(mb, "lab")
-    loss = cvt.forward(word_input, mode, char_input=char_input, label=label)
-
-    if mode == "labeled":
-        running_loss += loss.item()
-        writer.add_scalar('data/labeled_loss', loss.item(), count)
-    elif mode == "unlabeled":
-        writer.add_scalar('data/unlabeled_loss', loss.item(), count)
-
-    loss.backward()
-    optimizer.step()
-    if count % 101 == 0 and count != 0:
-        cvt.eval()
-        precision, recall, f1 = evaluator.evaluate_on_data(cvt, data)
-        writer.add_scalar('data/precision', precision, count)
-        writer.add_scalar('data/recall', recall, count)
-        writer.add_scalar('data/f1', f1, count)
-        print("precision: {}, recall: {}, f1: {} at training step {}".format(precision, recall, f1, count))
-        print("{} mode loss: {}".format(mode, loss))
-    if count % 1000 == 0 and count != 0:
-        artifacts_manager.save_model_and_artifacts(cvt)
-    if count % 20284 == 0 and count != 0: # this equivalent to one epoch
-        scheduler.step(running_loss)
-        running_loss = 0
-    count += 1
-
-writer.close()
-
-
-""" this part is for tweaking and validating """
-# for i in range(len(data.lab.vocab)):
-#     print(data.lab.vocab.itos[i])
-# print(data.lab.vocab)
-# for i, batch in enumerate(data.dev):
-#     print(batch)
+if __name__ == "__main__":
+    run()
