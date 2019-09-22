@@ -11,7 +11,7 @@ install:
   # - pip install -e .
 notifications:
   email: false
-script: pytests
+script: pytest
 after_success:
   - pip install coveralls
   - coveralls
