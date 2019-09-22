@@ -3,3 +3,4 @@ runs/
 labeled_data/
 pretrained_vectors/
 unlabeled_data/
+cvt.code-workspace
