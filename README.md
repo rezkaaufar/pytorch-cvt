@@ -1,5 +1,7 @@
 [![Build Status](https://travis-ci.org/rezkaaufar/pytorch-cvt.svg?branch=master)](https://travis-ci.org/rezkaaufar/pytorch-cvt)
 
+[![Coverage Status](https://coveralls.io/repos/github/rezkaaufar/pytorch-cvt/badge.svg?branch=master)](https://coveralls.io/github/rezkaaufar/pytorch-cvt?branch=master)
+
 # pytorch-cvt
 Cross view training for sequence labeling in pytorch
 
