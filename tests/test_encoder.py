@@ -8,9 +8,9 @@ import pytest
 import torch
 import torch.nn as nn
 
-os.chdir("../")
+import sys
+sys.path.insert(1, os.getcwd())
 from src.encoder import Encoder
-os.chdir("tests")
 
 class TestEncoder():
     def test_minimal(self):
