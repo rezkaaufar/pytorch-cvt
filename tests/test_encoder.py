@@ -1,13 +1,16 @@
 import itertools
 import math
 import random
+import os
 
 from pytest import approx
 import pytest
 import torch
 import torch.nn as nn
 
+os.chdir("../")
 from src.encoder import Encoder
+os.chdir("tests")
 
 class TestEncoder():
     def test_minimal(self):

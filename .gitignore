@@ -4,3 +4,4 @@ labeled_data/
 pretrained_vectors/
 unlabeled_data/
 *.code-workspace
+.idea/
