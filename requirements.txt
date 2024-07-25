@@ -1,6 +1,6 @@
 numpy==1.19.2
 pytest==6.1.1
 tensorboardX==2.1
-torch==1.6.0
+torch==2.2.0
 pytorch-crf
 torchtext==0.7.0
